@@ -157,3 +157,77 @@ jobs:
           uv pip install --system -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
           uv pip install --system torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
           uv pip install --system onnx==1.23.2
+
+  # ── uv 全局接管 Python(2026-11-02 追加,应主仓追加需求):退役
+  # setup-python,uv 自管解释器(python-build-standalone)——setup-python
+  # 替代路线的独立基准。与 uv-* job 的差别:零 setup-python;uv python
+  # install 3.10 单列一步(单独读「Python 获取」耗时),依赖装进 uv venv
+  # (canonical 流程,uv pip 自动发现 cwd 的 .venv)。
+  uv-full-ubuntu-latest:
+    name: uv-full(ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        run: echo "nproc=$(nproc)"
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: requirements-*.txt
+      - name: uv python install 3.10(接管解释器)
+        run: uv python install 3.10
+      - name: uv venv+装依赖(三清单+torch cpu+onnx)
+        run: |
+          uv venv --python 3.10
+          uv pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          uv pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install onnx==1.23.2
+
+  uv-full-ubuntu-slim:
+    name: uv-full(ubuntu-slim)
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        run: echo "nproc=$(nproc)"
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: requirements-*.txt
+      - name: uv python install 3.10(接管解释器)
+        run: uv python install 3.10
+      - name: uv venv+装依赖(三清单+torch cpu+onnx)
+        run: |
+          uv venv --python 3.10
+          uv pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          uv pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install onnx==1.23.2
+
+  uv-full-windows:
+    name: uv-full(windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        shell: bash
+        run: echo "cores=$NUMBER_OF_PROCESSORS"
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: requirements-*.txt
+      - name: uv python install 3.10(接管解释器)
+        shell: bash
+        run: uv python install 3.10
+      - name: uv venv+装依赖(三清单+torch cpu+onnx)
+        shell: bash
+        run: |
+          uv venv --python 3.10
+          uv pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          uv pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install onnx==1.23.2
