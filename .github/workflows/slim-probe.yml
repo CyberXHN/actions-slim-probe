@@ -1,0 +1,86 @@
+# ubuntu-slim(1C/5G 容器型 runner)前置条件探针——公开仓免费,不占私有仓额度。
+# 复刻主仓 CI 全量档(tests-full)的前置步骤,不跑 unittest:
+#   probe-env :sudo 免密 / apt-get install libgl1(非特权容器关键卡点) / 环境规格
+#   probe-deps:setup-python 3.10 + 三 requirements + torch cpu + onnx 安装耗时(冷)
+#   probe-warm:同链二跑,验证 pip 缓存命中后的暖耗时(对照 15 分钟硬顶)
+# 判据:libgl1 装不上 = cv2 import 前置死;安装段 + 测试段预算须 < 15 分钟。
+name: slim-probe
+
+on: [push, workflow_dispatch]
+
+jobs:
+  probe-env:
+    name: 环境与 libgl1 前置
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    steps:
+      - name: 环境信息
+        run: |
+          echo "== CPU =="; nproc; grep -m1 "model name" /proc/cpuinfo || true
+          echo "== MEM =="; free -h
+          echo "== DISK =="; df -h / | head -3
+          echo "== OS =="; head -2 /etc/os-release
+          echo "== python =="; python3 --version; command -v python3
+          echo "== sudo 免密 =="; sudo -n whoami
+      - name: 关键前置 sudo apt-get install libgl1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1
+      - name: libGL 落位确认
+        run: |
+          ldconfig -p | grep -i libGL.so || echo "libGL.so NOT FOUND"
+          dpkg -l | grep -E '^ii +libgl1' || echo "libgl1 NOT in dpkg"
+
+  probe-deps:
+    name: 依赖安装(冷)
+    runs-on: ubuntu-slim
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements-gateway.txt
+            requirements-software.txt
+            requirements-manager.txt
+      - name: libgl1(cv2 运行库)
+        run: sudo apt-get update && sudo apt-get install -y libgl1
+      - name: 装依赖(复刻主仓 CI 全量档命令)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx==1.23.2
+      - name: import 冒烟(libGL 满足性)
+        run: |
+          python -c "import cv2, numpy; print('cv2', cv2.__version__, '/ numpy', numpy.__version__)"
+          python -c "import torch; print('torch', torch.__version__)"
+          python -c "import onnx; print('onnx', onnx.__version__)"
+
+  probe-warm:
+    name: 依赖安装(暖)
+    needs: probe-deps
+    runs-on: ubuntu-slim
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements-gateway.txt
+            requirements-software.txt
+            requirements-manager.txt
+      - name: libgl1(cv2 运行库)
+        run: sudo apt-get update && sudo apt-get install -y libgl1
+      - name: 装依赖(同冷档,验证缓存命中提速)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx==1.23.2
+      - name: import 冒烟
+        run: python -c "import cv2, torch, onnx; print('imports OK')"
