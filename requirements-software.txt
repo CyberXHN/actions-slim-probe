@@ -1,14 +1,41 @@
-# 探针快照:提取自私有主仓 requirements-software.txt 的有效依赖行(仅包声明,注释略)
+# FR5 VLM Agent - 软件块依赖（进程 :8000 无头；Python 3.13）
+#
+# R2 三块化 + settings-center 后软件块=纯 HTTP 服务:server(编排/语音/任务)
+# + orchestrator + vlm + planner/grasp/skills + perception 算法子包 + sim。
+# 进程内零 fairino/dexhand/pyrealsense2 SDK import(零 HAL 断言执法),故无相机栈。
+#
+# 解释器:Python 3.13(独立 env fr5vlm-sw;dev env fr5vlm 3.10 仍跑网关/全量)。
+# 安装:conda activate fr5vlm-sw && pip install -r requirements-software.txt
+# 部署差异走 env 白名单(HARDWARE_URL/SOFTWARE_URL/模型三项 URL),行为参数走
+# config/application.yml(见 src/settings.py)。
+#
+# fairino / dexhand SDK 不在本文件(网关块,经 sys.path 引入,见 requirements-gateway.txt)
+
+# === 感知算法子包（detection/localization/relocate/session;numpy 数组+cv2 编解码） ===
 numpy==2.2.6
-opencv-python==4.14.0.94
-httpx>=0.27.0
+opencv-python==4.14.0.94    # cp37-abi3 轮天然跨版本;4.x 线最新,5.x 硬禁(5.0 实测移除 cv2.calibrateHandEye);Linux 无头环境换 opencv-python-headless
+
+# === 模型推理 client-server 拆分（检测跨机化;remote_http 对端） ===
+httpx>=0.27.0               # remote_http 检测后端客户端 + 软件侧→网关 HTTP 客户端;openai 传递依赖,显式登记防漂移
+
+# === Web server(:8000 无头,仅网关可达) ===
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
-websockets>=14.0
+websockets>=14.0            # 百炼云语音直连(additional_headers 需 14.0+);uvicorn[standard] 传递依赖,显式登记
 python-multipart>=0.0.9
-cryptography<46
-pywebview==6.2.1
-openai>=3.0
-python-dotenv>=1.0.0
-pyyaml>=6.0
-matplotlib
+
+# === 链路加密（P1/P3;配对接收面临时自签证书生成,跨块共享原语同源） ===
+cryptography<46            # 配对临时证书/B 端叶子接收落盘;钉法对齐 manager——20.04
+                            # 打包基座 glibc 保守线,放宽须过双平台打包冒烟再拍板
+
+# === 管理窗口壳(pywebview 进程内 js_api 桥,2026-10-21 窗口壳计划) ===
+pywebview==6.2.1            # Windows 走 WebView2(经 pythonnet,随依赖链);Linux 装而不用(降级 CLI 向导);
+                            # 与 gateway/manager 三清单同锚,2026-10-26 统一 6.2.1(dev fr5vlm 实测线;CI 三清单合装时 5.4/6.2.1 双 pin 冲突暴露)
+
+# === VLM 决策层（云端 API） ===
+openai>=3.0                 # async streaming tool_calls;实装 3.x,1.x→3.x breaking 已越过(2026-10-19 体检)
+python-dotenv>=1.0.0        # .env(VLM_API_KEY 等;已 gitignore)
+
+# === 配置中心 + 仿真回放 ===
+pyyaml>=6.0                 # config/application.yml 加载(src/settings.py)
+matplotlib                  # sim 回放比对轨迹图

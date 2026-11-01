@@ -1,13 +1,44 @@
-# 探针快照:提取自私有主仓 requirements-gateway.txt 的有效依赖行(仅包声明,注释略)
-pyrealsense2==2.54.2.5684
-pygrabber==0.2
+# FR5 VLM Agent - 网关块依赖（进程 :8131;Python 3.10/3.11）
+#
+# R2 三块化后硬件网关自含:设备面(机器人/手/相机)+ 相机推流 + 桌面壳前端(file:// dist;
+# P6 起浏览器面退役)+ 软件侧链路(bridge.py,原反代已退役)。
+# fairino / dexhand SDK 经 submodule + sys.path 引入(hal/sdk_path.py),**不 pip 安装**
+# ——fairino 预编译 .so 仅 cpython-310/311,此即本文件解释器上界的根因。
+#
+# 解释器:Python 3.10(dev env fr5vlm 即网关档);3.11 未实测按 SDK 支持面开放。
+# 安装:conda activate fr5vlm && pip install -r requirements-gateway.txt
+#
+# numpy 钉版 2.2.6(2026-10-16 对齐 dev env 既成事实,全仓首次统一大版本):
+# fairino/dexhand SDK 零 numpy 依赖;真门=numpy 2.3.0(2025-06)起 requires_python
+# >=3.11,2.2.6 即 py3.10 线末顶格(2.2.7 不存在);「pyrealsense2 2.54 旧轮 ABI 门」
+# 经 2026-10-19 体检查证为假情报(2.59.1.11053 零 numpy 声明)。pyrealsense2 升级
+# 与 numpy 无关,真机帧转换回归照 docs/VERIFICATION-CHECKLIST.md G 章。ros2 档
+# (Humble cv_bridge 锁 numpy1)解冻时独立评估,勿按本文件。
+#
+# 共享锚点(numpy/opencv-python/fastapi/uvicorn/httpx/python-dotenv)跨拆分文件
+# 重复登记,升级须同步所有登记处。
+
+# === 相机栈（D455 librealsense + 掌心 UVC DirectShow 枚举） ===
+pyrealsense2==2.54.2.5684   # pip 版捆绑 librealsense2 2.54;ABI 真机回归见 CHECKLIST G 章
+pygrabber==0.2              # Windows DirectShow 设备名枚举;掌心 UVC 按名解析
+
+# === 数值/图像（推流编码 + 帧转换;相机 HAL 与算法侧共用锚点） ===
 numpy==2.2.6
-opencv-python==4.14.0.94
+opencv-python==4.14.0.94   # 4.x 线最新;5.x 硬禁——5.0 实测移除 cv2.calibrateHandEye(手眼标定命根)
+
+# === 网关服务面（FastAPI :8131 + SSE/MJPEG + WS 转发 + 软件侧链路 bridge.py） ===
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
-websockets>=14.0
-httpx>=0.27.0
-python-dotenv>=1.0.0
-pyyaml>=6.0
-cryptography<46
-pywebview==6.2.1
+websockets>=14.0            # /ws 双向转发;uvicorn[standard] 传递依赖,显式登记
+httpx>=0.27.0               # 业务面软件侧链路转发(bridge.py;webface 反代已随 P6 浏览器面退役)
+python-dotenv>=1.0.0        # .env(HARDWARE_GATEWAY_TOKEN 等)
+pyyaml>=6.0                 # 缺省配置中心加载面(网关消费 robot/hand/camera 节)
+
+# === 链路加密（P1/P3;TLS 上下文 + 内部 CA 现场签发,集中向导用） ===
+cryptography<46            # pki.py CA/叶子签发(ECDSA P-256);钉法对齐 manager——20.04
+                            # 打包基座 glibc 保守线,放宽须过双平台打包冒烟再拍板
+
+# === 桌面壳（pywebview 原生窗口承载前端页,启动器就绪后拉起） ===
+pywebview==6.2.1            # Windows 经 pythonnet 驱动 WebView2(Win10/11 预装 runtime);
+                            # Linux 走 GTK 后端须另装系统 PyGObject(apt python3-gi),缺依赖时
+                            # 自动回退系统浏览器(降级链见 src/hardware_gateway/shell.py)

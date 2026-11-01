@@ -1,10 +1,47 @@
-# 探针快照:提取自私有主仓 requirements-manager.txt 的有效依赖行(仅包声明,注释略)
-fastapi==0.146.0
-uvicorn==0.54.0
-httpx==0.28.1
-pyyaml==6.0.3
-huggingface_hub==1.33.0
-modelscope==1.40.2
+# FR5 VLM Agent - 模型管理器依赖（模型侧 :8130 控制台/装配台运行面）
+#
+# 模型管理器（python -m src.manager）自身运行依赖：FastAPI 服务 + pywebview
+# 窗口壳 + httpx 上游转发；sidecar 检测 venv 与 ASR/TTS 双 llama-server 由装配
+# 引擎自管（requirements-model-server.txt），不经本文件。
+#
+# 安装：pip install -r requirements-manager.txt（任意 Python >=3.10 的 venv）。
+# dev 主环境 fr5vlm 直跑管理器即浏览器档（缺 pywebview 自动降级，无需专建环境）；
+# 需要原生窗口时自建 venv 装本清单，Nuitka 打包经 spike 的 pbs buildenv 自装
+# （曾拍板的专用 conda 环境 fr5manager 已随 conda 打包链废弃清理，2026-10-06）。
+# 零 fairino/dexhand/相机依赖。
+#
+# Nuitka 为构建期工具不进本清单（scripts/spike_nuitka_manager.py 经 pbs
+# buildenv 自装，PR-C 分发链随 scripts/package_manager.py 固化）。
+
+# === Web 服务(2026-10-09 起 == 锁版:显式依赖全部冻结,防上游发新引入意外
+# (首例 tensorrt 11.4.0.106 无 win 轮事故);锚点=dev 主环境 fr5vlm 实测+三清单互证) ===
+fastapi==0.146.0             # pydantic/starlette 随动;控制台静态托管 + 装配/管理面;与 model-server 同锚
+uvicorn==0.54.0              # 标准版即可（无 WS 需求，SSE 走 h11 流式响应）
+httpx==0.28.1                # 三 sidecar 透传转发共享 AsyncClient
+
+# === 配置中心（src/manager __init__→config→src.settings 的 import 链即需 yaml；
+# 2026-10-17 CI 打包链第五层实证裸构建解释器起手即炸。此前未登记，靠
+# huggingface_hub 传递依赖隐式满足——显式锚定防上游摘除即断链） ===
+pyyaml==6.0.3                # 共享锚点（gateway/software 侧登记为 >=6.0，同 6.x 线；dev fr5vlm 实测 6.0.3）
+
+# === 装配引擎权重下载链（在 manager 宿主进程内 import，经 scripts/download_models.py）
+# 2026-09-30 D:\fr5_fresh 全新装配实测踩缺：宿主缺 huggingface_hub 时权重资产三级
+# 全部秒败；开发机 fr5vlm 因 transformers 传递依赖一直隐式满足，从未暴露 ===
+# huggingface_hub 锁 1.x 线(实测线 1.33.0):transformers 5.20.1 起上界
+# 已放宽至 <3.0,原「5.14.1 上界冲突」依据失效;现依据=2.x 太新未复测权重三级链;勿跟 2.x
+huggingface_hub==1.33.0      # 权重快照链后两级：hf-mirror（换 HF_ENDPOINT）与 HF 官方
+modelscope==1.40.2           # 魔搭优先档（国内直连最快）；缺包自动降级 hf-mirror 非硬依赖——登记保证全新部署走既定优先级
+# filelock 为上两者的传递依赖，2026-10-18 装配事故后转显式登记：4.2.1 起 __init__
+# 改 __getattr__ 字符串映射惰性加载子模块，Nuitka 静态遍历不跟随 → exe 缺
+# filelock._soft，权重三级链 import 即炸（§43）；锁 4.0.12 = eager import 实测
+# 锚点（2026-10-12 构建产物含 _soft）。打包侧对权重链三库一律 --include-package
+# 强收全量双保险（huggingface_hub 1.33.0 utils 惰性导入表同坑）
 filelock==4.0.12
+# cryptography 为 modelscope→modelscope_hub 传递依赖，钉 <46 为实测保守线：2026-10-19
+# 拆轮复核 45.0.7 与 50.0.2 的 manylinux_2_28 轮 _rust 均仅引 GLIBC_2.28——旧「50.x
+# 引 2.34 炸 20.04」观察被推翻（疑当时误选 2_34 基线轮）；放宽至 50.x 须过 20.04 基座
+# Nuitka 打包冒烟后拍板（体检计划 §8-C4）
 cryptography<46
-pywebview==6.2.1
+
+# === 窗口壳（PR-B，计划 §9） ===
+pywebview==6.2.1             # Windows 走 WebView2（经 pythonnet）；缺包自动降级系统浏览器，不致命;与 gateway/software 三清单同锚,2026-10-26 统一 6.2.1(dev fr5vlm 实测线;CI 三清单合装时 5.4/6.2.1 双 pin 冲突暴露)

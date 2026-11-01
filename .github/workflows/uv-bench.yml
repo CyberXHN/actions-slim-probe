@@ -1,0 +1,159 @@
+# uv vs pip 装依赖基准(2026-11-02):应主仓 fr5-vlm-agent「CI 加速评估——pip 换 uv
+# 收益」而设,在本公开探针仓跑(公开仓标准 runner 免费,零私有仓额度)。
+# 设计:
+# - 6 job 同跑:{ubuntu-latest, ubuntu-slim, windows-latest} × {pip, uv};
+# - 依赖面与主仓 CI「装依赖」步完全一致:三 requirements + torch 2.14.0 cpu 轮
+#   + onnx 1.23.2,解释器 3.10(对齐主仓全量档);
+# - pip 侧对齐主仓口径:setup-python(cache: pip)→ upgrade pip → 三清单 →
+#   torch → onnx(同序合一步);uv 侧:setup-python(无 pip 缓存)→ setup-uv
+#   (enable-cache,uv 0.13.6)→ uv pip install --system 三清单 → torch → onnx
+#   (--system 对齐 pip 全局直装口径,不用 venv);
+# - 计时口径:gh api runs/{id}/jobs 提取各 step 的 started/completed,对比
+#   「装依赖」单步与「setup(含缓存恢复)+装依赖」合计;
+# - dispatch 两次:第 1 次=冷(全量下载),第 2 次=暖(缓存命中);主仓 CI 稳态
+#   即暖态,暖态数据为决策主口径;
+# - 环境信息步记录 nproc 与 pip/uv 版本,runner 实际核数以本次实测为准。
+name: uv-vs-pip bench
+
+on:
+  workflow_dispatch:
+
+jobs:
+  pip-ubuntu-latest:
+    name: pip(ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        run: echo "nproc=$(nproc)"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements-gateway.txt
+            requirements-software.txt
+            requirements-manager.txt
+      - name: pip 装依赖(三清单+torch cpu+onnx)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx==1.23.2
+
+  uv-ubuntu-latest:
+    name: uv(ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        run: echo "nproc=$(nproc)"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: requirements-*.txt
+      - name: uv 装依赖(三清单+torch cpu+onnx;--system 对齐 pip 直装)
+        run: |
+          uv pip install --system -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          uv pip install --system torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --system onnx==1.23.2
+
+  pip-ubuntu-slim:
+    name: pip(ubuntu-slim)
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        run: echo "nproc=$(nproc)"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements-gateway.txt
+            requirements-software.txt
+            requirements-manager.txt
+      - name: pip 装依赖(三清单+torch cpu+onnx)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx==1.23.2
+
+  uv-ubuntu-slim:
+    name: uv(ubuntu-slim)
+    runs-on: ubuntu-slim
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        run: echo "nproc=$(nproc)"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: requirements-*.txt
+      - name: uv 装依赖(三清单+torch cpu+onnx;--system 对齐 pip 直装)
+        run: |
+          uv pip install --system -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          uv pip install --system torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --system onnx==1.23.2
+
+  pip-windows:
+    name: pip(windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        shell: bash
+        run: echo "cores=$NUMBER_OF_PROCESSORS"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: |
+            requirements-gateway.txt
+            requirements-software.txt
+            requirements-manager.txt
+      - name: pip 装依赖(三清单+torch cpu+onnx)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          pip install torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx==1.23.2
+
+  uv-windows:
+    name: uv(windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: 环境信息
+        shell: bash
+        run: echo "cores=$NUMBER_OF_PROCESSORS"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.6"
+          enable-cache: true
+          cache-dependency-glob: requirements-*.txt
+      - name: uv 装依赖(三清单+torch cpu+onnx;--system 对齐 pip 直装)
+        shell: bash
+        run: |
+          uv pip install --system -r requirements-gateway.txt -r requirements-software.txt -r requirements-manager.txt
+          uv pip install --system torch==2.14.0 --index-url https://download.pytorch.org/whl/cpu
+          uv pip install --system onnx==1.23.2
