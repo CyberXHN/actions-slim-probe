@@ -1,0 +1,10 @@
+# 探针快照:提取自私有主仓 requirements-manager.txt 的有效依赖行(仅包声明,注释略)
+fastapi==0.146.0
+uvicorn==0.54.0
+httpx==0.28.1
+pyyaml==6.0.3
+huggingface_hub==1.33.0
+modelscope==1.40.2
+filelock==4.0.12
+cryptography<46
+pywebview==6.2.1
