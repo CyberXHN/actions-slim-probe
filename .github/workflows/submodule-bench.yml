@@ -10,6 +10,12 @@
 # - c-manual-seq:手动浅克隆但串行 → b−c 隔离 --jobs 并行增量,c−a 隔离 checkout
 #   附带项(--force / protocol v2 / submodule sync / extraheader)。
 # .gitmodules 未设 submodule.<name>.shallow → --recommend-shallow 为 no-op(带上无害)。
+# - d-no-ros2:fairino+dexhand(Windows 全量档裁剪候选——ROS2 栈生产仅在 Ubuntu 跑,
+#   frcobot_ros2 在 Windows 唯一用途是给 test_ros2_patches 离线补丁守卫当宿主,缺位时
+#   该测试干净跳过且 Ubuntu 全量档仍守);du 实测 frcobot 仅 30M,变体 d 验证裁剪实测差;
+# - e-fairino-only:仅 fairino(对位 3.13 软件面档——31 模块清单里硬依赖 submodule 的
+#   只有 fairino 三件(test_soft_estop/test_motion_settled/test_hardware_split 的
+#   fr5_client→from fairino import Robot),dexhand/frcobot 全可免);
 # 载荷:主仓同款三子仓(同路径、同锁定 SHA、同 .gitmodules 字段),其中
 # dexhand_sdk_python 内嵌 cpp/sdk(嵌套递归面);fairino 仓大(505MB)为主要计时对象。
 # 计时口径:gh api runs/{id}/jobs 提取 step started/completed(b/c 取 checkout+手动
@@ -39,7 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         runner: [ubuntu-slim, windows-latest]
-        variant: [a-checkout-recursive, b-manual-jobs8, c-manual-seq]
+        variant: [a-checkout-recursive, b-manual-jobs8, c-manual-seq, d-no-ros2, e-fairino-only]
     defaults:
       run:
         shell: bash
@@ -67,12 +73,33 @@ jobs:
         if: matrix.variant == 'c-manual-seq'
         run: git submodule update --init --recursive --depth 1
 
+      - name: 手动 submodule update(--jobs 8,不含 ROS2)
+        if: matrix.variant == 'd-no-ros2'
+        run: >-
+          git submodule update --init --recursive
+          --depth 1 --jobs 8 --recommend-shallow
+          -- third_party/fairino-python-sdk third_party/dexhand_sdk_python
+
+      - name: 手动 submodule update(--jobs 8,仅 fairino)
+        if: matrix.variant == 'e-fairino-only'
+        run: >-
+          git submodule update --init --recursive
+          --depth 1 --jobs 8 --recommend-shallow
+          -- third_party/fairino-python-sdk
+
       - name: 验证与形态
         run: |
           git submodule status --recursive
           for s in third_party/fairino-python-sdk third_party/dexhand_sdk_python \
                    third_party/frcobot_ros2 third_party/dexhand_sdk_python/cpp/sdk; do
-            echo "$s shallow=$(git -C "$s" rev-parse --is-shallow-repository)"
+            if [ -d "$s/.git" ]; then
+              echo "$s shallow=$(git -C "$s" rev-parse --is-shallow-repository)"
+            else
+              echo "$s 未初始化(本变体预期)"
+            fi
           done
-          test -f third_party/dexhand_sdk_python/cpp/sdk/README.md
-          du -sh third_party/* third_party/dexhand_sdk_python/cpp/sdk
+          if [ -d third_party/dexhand_sdk_python/.git ]; then
+            test -f third_party/dexhand_sdk_python/cpp/sdk/README.md
+          fi
+          du -sh third_party/*
+          du -sh third_party/dexhand_sdk_python/cpp/sdk 2>/dev/null || true
