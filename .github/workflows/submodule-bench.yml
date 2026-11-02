@@ -1,0 +1,78 @@
+# submodule 初始化加速基准(2026-11-02):应主仓 fr5-vlm-agent「checkout 拆开 +
+# 手动 git submodule update --depth 1 --jobs 8 --recommend-shallow 能否加速
+# submodule 初始化」而设,在本公开探针仓跑(公开仓标准 runner 免费,零私有仓额度)。
+# 背景(查 actions/checkout@v7 源码 submoduleUpdate() 实证):checkout 内置的
+# submodule 逻辑就是 `git -c protocol.version=2 submodule update --init --force
+# --depth=${fetchDepth} --recursive`,而 checkout 默认 fetch-depth=1 → 主仓 CI 的
+# submodule 本来就是浅克隆,只是串行(无 --jobs)。本基准隔离验证:
+# - a-checkout-recursive:主仓现状基线(checkout 内置,浅+串行);
+# - b-manual-jobs8:提案命令(--depth 1 --jobs 8 --recommend-shallow);
+# - c-manual-seq:手动浅克隆但串行 → b−c 隔离 --jobs 并行增量,c−a 隔离 checkout
+#   附带项(--force / protocol v2 / submodule sync / extraheader)。
+# .gitmodules 未设 submodule.<name>.shallow → --recommend-shallow 为 no-op(带上无害)。
+# 载荷:主仓同款三子仓(同路径、同锁定 SHA、同 .gitmodules 字段),其中
+# dexhand_sdk_python 内嵌 cpp/sdk(嵌套递归面);fairino 仓大(505MB)为主要计时对象。
+# 计时口径:gh api runs/{id}/jobs 提取 step started/completed(b/c 取 checkout+手动
+# 步合计,与 a 的 checkout 步对齐)。
+# 验证步:submodule status --recursive 全 4 条就位、浅仓标志、嵌套锚点文件、落盘体积。
+name: submodule-bench
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/submodule-bench.yml
+      - .gitmodules
+      - third_party/**
+
+concurrency:
+  group: submodule-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bench:
+    name: ${{ matrix.variant }}(${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-slim, windows-latest]
+        variant: [a-checkout-recursive, b-manual-jobs8, c-manual-seq]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 检出(a:含 submodule 递归=主仓现状)
+        if: matrix.variant == 'a-checkout-recursive'
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: 检出(b/c:fetch-depth 1 不带 submodule)
+        if: matrix.variant != 'a-checkout-recursive'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: 手动 submodule update(--jobs 8 并行=提案命令)
+        if: matrix.variant == 'b-manual-jobs8'
+        run: >-
+          git submodule update --init --recursive
+          --depth 1 --jobs 8 --recommend-shallow
+
+      - name: 手动 submodule update(串行)
+        if: matrix.variant == 'c-manual-seq'
+        run: git submodule update --init --recursive --depth 1
+
+      - name: 验证与形态
+        run: |
+          git submodule status --recursive
+          for s in third_party/fairino-python-sdk third_party/dexhand_sdk_python \
+                   third_party/frcobot_ros2 third_party/dexhand_sdk_python/cpp/sdk; do
+            echo "$s shallow=$(git -C "$s" rev-parse --is-shallow-repository)"
+          done
+          test -f third_party/dexhand_sdk_python/cpp/sdk/README.md
+          du -sh third_party/* third_party/dexhand_sdk_python/cpp/sdk

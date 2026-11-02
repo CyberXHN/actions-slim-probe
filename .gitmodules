@@ -1,0 +1,12 @@
+[submodule "third_party/fairino-python-sdk"]
+	path = third_party/fairino-python-sdk
+	url = https://github.com/FAIR-INNOVATION/fairino-python-sdk.git
+	ignore = dirty
+[submodule "third_party/dexhand_sdk_python"]
+	path = third_party/dexhand_sdk_python
+	url = https://github.com/DexRobot/dexhand_sdk_python.git
+	ignore = dirty
+[submodule "third_party/frcobot_ros2"]
+	path = third_party/frcobot_ros2
+	url = https://github.com/FAIR-INNOVATION/frcobot_ros2.git
+	ignore = dirty
